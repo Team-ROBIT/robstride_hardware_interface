@@ -46,7 +46,8 @@ Many gs_usb/candlelight adapters do not support bus-off auto-recovery (`restart-
 |---|---|---|
 | `master_id` | Host CAN id used as the source address of outgoing frames | `253` (`0xFD`) |
 | `number_of_joints` | Optional cross-check against the number of `<joint>` blocks | (unchecked) |
-| `error_timeout_ms` | Time without fresh feedback before a joint counts as lost. Also the value each motor's own `CAN_TIMEOUT` watchdog (`0x7028`) is armed with | `4000` |
+| `error_timeout_ms` | Time without fresh feedback before a joint counts as lost | `4000` |
+| `motor_can_timeout_ms` | Each motor's own `CAN_TIMEOUT` watchdog (`0x7028`): after this long without a command the motor releases torque. `0` disables it, so when the bus dies a motor keeps holding the last target it received (the freeze hold). Motors that lose power still come back limp. A clean shutdown still disables torque | `error_timeout_ms` |
 | `freeze_on_joint_loss` | See §6 | `true` |
 | `torque_enable` | Whether activation engages torque. `false` brings the rig up readable but limp: joints report state and can be moved by hand until `~/set_torque` is called | `true` |
 

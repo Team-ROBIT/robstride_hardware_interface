@@ -110,6 +110,8 @@ private:
 
   uint8_t master_id_ = 0xFD;
   double error_timeout_ms_ = 4000.0;
+  // Each motor's own CAN_TIMEOUT watchdog; <= 0 disables it.
+  double motor_can_timeout_ms_ = 4000.0;
   // While inactive the buses are closed, so missing feedback is expected
   // and read() must not escalate it.
   bool is_active_ = false;

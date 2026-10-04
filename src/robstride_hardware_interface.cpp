@@ -69,9 +69,13 @@ double ElapsedMsSinceUpdate(uint64_t now_ns, uint64_t last_ns)
 constexpr uint64_t kRecoveryResendNs = 200'000'000ull;
 
 // CAN_TIMEOUT (0x7028) in its native 1/20000 s units, clamped to range.
-uint32_t CanTimeoutRaw(double error_timeout_ms)
+// Zero (or negative) disables the motor's watchdog entirely.
+uint32_t CanTimeoutRaw(double timeout_ms)
 {
-  return std::max(1u, static_cast<uint32_t>(std::min(error_timeout_ms * 20.0, 100000.0)));
+  if (timeout_ms <= 0.0) {
+    return 0u;
+  }
+  return std::max(1u, static_cast<uint32_t>(std::min(timeout_ms * 20.0, 100000.0)));
 }
 
 constexpr double kTwoPi = 2.0 * M_PI;
@@ -103,6 +107,12 @@ CallbackReturn RobstrideHardware::on_init(
     if (info_.hardware_parameters.count("error_timeout_ms")) {
       error_timeout_ms_ = std::stod(info_.hardware_parameters.at("error_timeout_ms"));
     }
+    // Defaults to error_timeout_ms; 0 lets a motor keep holding its last
+    // target when the bus goes silent instead of releasing torque.
+    motor_can_timeout_ms_ = error_timeout_ms_;
+    if (info_.hardware_parameters.count("motor_can_timeout_ms")) {
+      motor_can_timeout_ms_ = std::stod(info_.hardware_parameters.at("motor_can_timeout_ms"));
+    }
     if (info_.hardware_parameters.count("freeze_on_joint_loss")) {
       const std::string & v = info_.hardware_parameters.at("freeze_on_joint_loss");
       freeze_on_joint_loss_ = v == "true" || v == "True" || v == "1";
@@ -113,8 +123,15 @@ CallbackReturn RobstrideHardware::on_init(
     }
   } catch (const std::exception & e) {
     RCLCPP_ERROR_STREAM(
-      logger_, "Malformed hardware parameter (master_id/error_timeout_ms): " << e.what());
+      logger_,
+      "Malformed hardware parameter (master_id/error_timeout_ms/motor_can_timeout_ms): " << e.what());
     return CallbackReturn::ERROR;
+  }
+  if (motor_can_timeout_ms_ <= 0.0) {
+    RCLCPP_WARN(
+      logger_,
+      "Motor CAN watchdog disabled (motor_can_timeout_ms <= 0): if the bus dies, motors keep "
+      "holding their last target until a clean shutdown or a power cut.");
   }
 
   const size_t n = info_.joints.size();
@@ -406,7 +423,7 @@ CallbackReturn RobstrideHardware::on_activate(
   for (auto & jh : joints_) {
     buses_[jh.can_interface]->SendFrame(
       jh.motor->EncodeParamWriteU32(
-        robstride_sdk::ParamIndex::CAN_TIMEOUT, CanTimeoutRaw(error_timeout_ms_)));
+        robstride_sdk::ParamIndex::CAN_TIMEOUT, CanTimeoutRaw(motor_can_timeout_ms_)));
   }
 
   // Select each joint's run_mode (0x7005) before enabling.
@@ -775,7 +792,7 @@ return_type RobstrideHardware::write(
         // watchdog and would hold its last command on the next dropout.
         frames_by_bus[jh.can_interface].push_back(
           jh.motor->EncodeParamWriteU32(
-            robstride_sdk::ParamIndex::CAN_TIMEOUT, CanTimeoutRaw(error_timeout_ms_)));
+            robstride_sdk::ParamIndex::CAN_TIMEOUT, CanTimeoutRaw(motor_can_timeout_ms_)));
         frames_by_bus[jh.can_interface].push_back(jh.motor->EncodeEnable());
       }
       continue;
