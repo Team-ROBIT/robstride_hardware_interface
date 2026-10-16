@@ -53,6 +53,12 @@ struct JointHandle
   double wrap_center = 0.0;
   // No URDF position limits: targets take the shortest way round.
   bool continuous = false;
+  // motion mode: cap on kp x (target - position), N*m; <= 0 means no cap.
+  double max_torque = 0.0;
+  // URDF position limits (joint frame), checked at activation.
+  bool has_limits = false;
+  double lower = 0.0;
+  double upper = 0.0;
   robstride_sdk::RobstrideMotor * motor;  // owned by RobstrideHardware::motors_
 };
 
@@ -118,6 +124,9 @@ private:
   // true: hold the remaining joints and ignore commands when one is lost.
   // false: return ERROR so the whole component is deactivated.
   bool freeze_on_joint_loss_ = true;
+  // Activation fails if a joint reads more than this (rad) outside its URDF limits; <= 0 disables.
+  double activation_limit_margin_rad_ = 0.35;
+  std::vector<uint8_t> last_status_flags_;  // logged once per change
   // Latched on the first loss, cleared only by a fresh activation.
   bool frozen_ = false;
   // Positions held while frozen, captured at the moment of the loss.
